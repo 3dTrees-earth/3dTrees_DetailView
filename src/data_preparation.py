@@ -14,7 +14,9 @@ import laspy as las
 import numpy as np
 
 
-def prepare_las_file(input_las, output_csv, output_dir, skip_0=True, instance_column = 'TreeID'):
+def prepare_las_file(
+    input_las, output_csv, output_dir, skip_0=True, instance_column="TreeID"
+):
     """
     Prepare a single las file for further processing.
 
@@ -46,11 +48,13 @@ def prepare_las_file(input_las, output_csv, output_dir, skip_0=True, instance_co
         ids = ids[ids != 0]
 
     # create a DataFrame with the required columns filename,species_id,tree_H
-    df = pd.DataFrame({
-        'filename': [np.nan],  # blank filename
-        'species_id': [np.nan],  # blank species_id
-        'tree_H': [np.nan]   # tree height based on Z_range
-    })
+    df = pd.DataFrame(
+        {
+            "tree_id": [np.nan],  # blank filename
+            "species_id": [np.nan],  # blank species_id
+            "tree_H": [np.nan],  # tree height based on Z_range
+        }
+    )
 
     # save each tree as a separate las file based on TreeID
     for tree_id in ids:
@@ -58,17 +62,20 @@ def prepare_las_file(input_las, output_csv, output_dir, skip_0=True, instance_co
         if len(tree_points) > 0:
             # calculate tree height as the range of Z values
             tree_height = np.max(tree_points.z) - np.min(tree_points.z)
-            output_file = os.path.join(output_dir, f'tree_{int(tree_id)}.las')
+            output_file = os.path.join(output_dir, f"{int(tree_id)}.las")
             tree_points.write(output_file)
             # append the output file and tree height to the DataFrame
-            df = df._append({
-                'filename': output_file,
-                'species_id': -999,  # still blank
-                'tree_H': tree_height
-            }, ignore_index=True)
+            df = df._append(
+                {
+                    "tree_id": output_file,
+                    "species_id": -999,  # still blank
+                    "tree_H": tree_height,
+                },
+                ignore_index=True,
+            )
 
     # save the DataFrame to a CSV file
-    df = df[df['filename'].notna()]
+    df = df[df["tree_id"].notna()]
     df.to_csv(output_csv, index=False)
     return df
 

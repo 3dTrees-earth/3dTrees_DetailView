@@ -29,20 +29,17 @@ WORKDIR /app
 
 # Install Python packages
 RUN pip3 install \
-    numpy==1.23.5 \
-    open3d==0.18.0 \
+    numpy \
     pydantic \
     pydantic-settings \
     tqdm \
     pandas \
     scikit-learn \
+    laspy \
     matplotlib \
     requests \
     fastapi \
     uvicorn
-
-# Install laspy with lazrs backend for LAZ support
-RUN pip3 install "laspy[lazrs]"
 
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
@@ -57,6 +54,9 @@ COPY . /src
 # Download densenet201 weights
 RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
     https://download.pytorch.org/models/densenet201-c1103571.pth
+
+# Install laspy with lazrs backend for LAZ support
+RUN pip3 install "laspy[lazrs]"
 
 RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; time.sleep(2.5)"
 

@@ -6,7 +6,7 @@ def run_predict(
     n_aug=10,
     output_dir="/output",
     path_csv_train="default_vals",
-    path_csv_lookup="./lookup.csv"
+    path_csv_lookup="./lookup.csv",
 ):
     import os
     import torch
@@ -17,11 +17,11 @@ def run_predict(
     from datetime import datetime
     import parallel_densenet as net
 
-    if os.path.splitext(prediction_data)[1].lower() in ['.las', '.laz']:
+    if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
 
-    outfile = f"{output_dir}/predictions_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}_.csv"
-    outfile_probs = f"{output_dir}/predictions_probs{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}_.csv"
+    outfile = f"{output_dir}/predictions.csv"
+    outfile_probs = f"{output_dir}/predictions_probs.csv"
 
     n_class = 33
     n_view = 7
@@ -31,9 +31,12 @@ def run_predict(
 
     if not os.path.exists(model_path):
         import requests
-        response = requests.get("https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1")
+
+        response = requests.get(
+            "https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1"
+        )
         model_path = "/model_202305171452_60"
-        with open(model_path, 'wb') as f:
+        with open(model_path, "wb") as f:
             f.write(response.content)
 
     if os.path.exists(path_csv_train):
@@ -57,20 +60,29 @@ def run_predict(
         if torch.cuda.is_available()
         else "mps"
         if torch.backends.mps.is_available()
-        else "cpu")
+        else "cpu"
+    )
     model.to(device)
     model.eval()
 
-    img_trans = transforms.Compose([
-        transforms.RandomVerticalFlip(0.5)])
+    img_trans = transforms.Compose([transforms.RandomVerticalFlip(0.5)])
 
     test_dataset = net.TrainDataset_AllChannels(
-        prediction_data, path_las, img_trans=img_trans, pc_rotate=True,
-        height_noise=0.01, test=True, res=res, n_sides=n_sides,
-        height_mean=train_height_mean, height_sd=train_height_sd,
-        tree_id_col=tree_id_col)
+        prediction_data,
+        path_las,
+        img_trans=img_trans,
+        pc_rotate=True,
+        height_noise=0.01,
+        test=True,
+        res=res,
+        n_sides=n_sides,
+        height_mean=train_height_mean,
+        height_sd=train_height_sd,
+        tree_id_col=tree_id_col,
+    )
     test_dataloader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=int(n_batch/2), shuffle=False, pin_memory=True)
+        test_dataset, batch_size=int(n_batch / 2), shuffle=False, pin_memory=True
+    )
 
     all_paths = test_dataset.trees_frame.iloc[:, 0]
     data_probs = {path: [] for path in all_paths}
@@ -90,31 +102,35 @@ def run_predict(
                     data_probs[path] += t_probs[i, :]
 
     max_prob_class = {key: np.argmax(array) for key, array in data_probs.items()}
-    df = pd.DataFrame({
-        "filename": max_prob_class.keys(),
-        "species_id": max_prob_class.values()})
+    df = pd.DataFrame(
+        {"filename": max_prob_class.keys(), "species_id": max_prob_class.values()}
+    )
 
     lookup = pd.read_csv(path_csv_lookup)
-    joined = pd.merge(df, lookup, on='species_id')
+    joined = pd.merge(df, lookup, on="species_id")
 
-    data_probs_df = pd.DataFrame.from_dict(data_probs, orient='index').reset_index()
-    col_labels = lookup['species']
+    data_probs_df = pd.DataFrame.from_dict(data_probs, orient="index").reset_index()
+    col_labels = lookup["species"]
     data_probs_df.columns = pd.concat([pd.Series(["File"]), col_labels])
 
     joined.to_csv(outfile, index=False)
     data_probs_df.to_csv(outfile_probs, index=False)
     return outfile, outfile_probs, joined, data_probs_df
 
+
 # For CLI usage
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Tree species prediction")
-    parser.add_argument('--prediction_data', type=str, default=r"/input/circle_3_segmented.las")
-    parser.add_argument('--path_las', type=str, default="")
-    parser.add_argument('--model_path', type=str, default="./model_ft_202412171652_3")
-    parser.add_argument('--tree_id_col', type=str, default='TreeID')
-    parser.add_argument('--n_aug', type=int, default=10)
-    parser.add_argument('--output_dir', type=str, default="/output")
+    parser.add_argument(
+        "--prediction_data", type=str, default=r"/input/circle_3_segmented.las"
+    )
+    parser.add_argument("--path_las", type=str, default="")
+    parser.add_argument("--model_path", type=str, default="./model_ft_202412171652_3")
+    parser.add_argument("--tree_id_col", type=str, default="TreeID")
+    parser.add_argument("--n_aug", type=int, default=10)
+    parser.add_argument("--output_dir", type=str, default="/output")
     args = parser.parse_args()
     run_predict(
         args.prediction_data,
@@ -122,5 +138,5 @@ if __name__ == "__main__":
         model_path=args.model_path,
         tree_id_col=args.tree_id_col,
         n_aug=args.n_aug,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
     )

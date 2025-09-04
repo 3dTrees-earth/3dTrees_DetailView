@@ -81,6 +81,19 @@ def main():
                 f"Predicted {len(joined)} trees across {joined['species'].nunique()} species"
             )
 
+            # run add_species
+            logger.info("Running add_species...")
+            import add_species
+
+            # Create output LAS file path
+            output_las_file = os.path.join(params.output_dir, "output_with_species.laz")
+
+            add_species.process_point_cloud(
+                las_file=params.prediction_data,
+                csv_folder=str(params.output_dir),
+                output_file=output_las_file,
+            )
+
         elif params.mode.lower() == "train":
             # Run training
             logger.info("Starting model training...")
