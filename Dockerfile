@@ -45,7 +45,6 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 
 # Copy your code
 COPY *.py /app/
-COPY /src/model_ft_202412171652_3 /app/
 COPY /src/lookup.csv /app/
 
 # Copy source code to /src as well
