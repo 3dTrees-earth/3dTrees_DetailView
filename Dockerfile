@@ -63,6 +63,16 @@ RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; tim
 # Set working directory for execution
 WORKDIR /app
 
+# set permissions for all folders
+# Set proper permissions for all directories
+RUN chmod -R 755 /app && \
+    chmod -R 755 /src && \
+    chmod -R 755 /in && \
+    chmod -R 755 /out && \
+    chmod -R 777 /tmp && \
+    chmod -R 755 /app/torch_cache
+
+
 # Set entrypoint
 CMD ["python3", "run.py"]
 # ENTRYPOINT ["python3", "predict.py"]
