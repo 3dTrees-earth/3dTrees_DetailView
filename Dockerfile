@@ -54,6 +54,8 @@ COPY /src/ /src
 RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
     https://download.pytorch.org/models/densenet201-c1103571.pth
 
+
+RUN wget -O /app/model_ft_202412171652_3 https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
 # Install laspy with lazrs backend for LAZ support
 RUN pip3 install "laspy[lazrs]"
 
