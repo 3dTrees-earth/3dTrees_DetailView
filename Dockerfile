@@ -19,12 +19,8 @@ WORKDIR /app
 # Copy install packages
 RUN pip3 install numpy pandas scikit-learn laspy matplotlib requests tqdm pydantic pydantic-settings
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-#RUN pip3 install fastapi uvicorn
 RUN pip3 install lazrs[all]
 
-# download the model file
-RUN wget -O /app/model_ft_202412171652_3 \
-    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
 
 # Copy your code
 COPY src/*.py /app/
@@ -42,11 +38,12 @@ RUN mkdir -p /app/torch_cache/hub/checkpoints
 RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
     https://download.pytorch.org/models/densenet201-c1103571.pth
 
+# download the model file
+RUN wget -O /app/model_ft_202412171652_3 \
+    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
+
+
 RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; time.sleep(2.5)"
 
 # Set entrypoint
 CMD ["python3", "run.py"]
-#ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# docker build -t detailview .
-# docker run --rm --gpus all -v "C:/TLS/docker/input:/input" -v "C:/TLS/docker//output:/output" detailview --prediction_data /input/circle_3_segmented.las --model_path /app/model_ft_202412171652_3
