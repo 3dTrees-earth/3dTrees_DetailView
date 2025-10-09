@@ -185,6 +185,9 @@ def run_predict(params: Parameters):
     print(
         f"[{datetime.now().strftime('%H:%M:%S')}] Predictions done. Preparing and writing outputs..."
     )
+    height_lookup = dict(
+        zip(test_dataset.trees_frame.iloc[:, 0], test_dataset.trees_frame["tree_H"])
+    )
 
     max_prob_class = {key: np.argmax(array) for key, array in data_probs.items()}
     max_prob = {
@@ -196,6 +199,7 @@ def run_predict(params: Parameters):
             "filename": list(max_prob_class.keys()),
             "species_id": list(max_prob_class.values()),
             "species_prob": list(max_prob.values()),
+            "tree_H": list(height_lookup.values()),
         }
     )
 
