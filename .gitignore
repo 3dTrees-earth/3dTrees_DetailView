@@ -9,6 +9,7 @@ test_predictions.csv
 /src/.spyproject
 run_docker.sh
 /src/__pycache__
+/src/model_ft_202412171652_3
 
 # Compiled python files
 *.py[oc]

@@ -22,6 +22,10 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 #RUN pip3 install fastapi uvicorn
 RUN pip3 install lazrs[all]
 
+# download the model file
+RUN wget -O /app/model_ft_202412171652_3 \
+    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
+
 # Copy your code
 COPY src/*.py /app/
 COPY src/model_ft_202412171652_3 /app/
