@@ -19,13 +19,13 @@ class Parameters(BaseSettings):
     )
 
     model_path: str = Field(
-        "./model_ft_202412171652_3",
+        "/app/model_ft_202412171652_3",
         description="Path to trained model file",
         alias=AliasChoices("model-path", "model_path"),
     )
 
     tree_id_col: str = Field(
-        "TreeID",
+        "PredInstance",
         description="Column name for tree IDs in LAS file",
         alias=AliasChoices("tree-id-col", "tree_id_col"),
     )
@@ -49,7 +49,7 @@ class Parameters(BaseSettings):
     )
 
     path_csv_lookup: str = Field(
-        "./lookup.csv",
+        "/app/lookup.csv",
         description="Path to species lookup CSV",
         alias=AliasChoices("path-csv-lookup", "path_csv_lookup"),
     )
