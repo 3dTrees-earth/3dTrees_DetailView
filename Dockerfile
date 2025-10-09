@@ -24,7 +24,6 @@ RUN pip3 install lazrs[all]
 
 # Copy your code
 COPY src/*.py /app/
-COPY src/model_ft_202412171652_3 /app/
 COPY src/lookup.csv /app/
 
 
