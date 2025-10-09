@@ -49,8 +49,9 @@ def run_predict(params: Parameters):
         # mask = np.isin(prediction_data[tree_id_col], ids)
         # prediction_data = prediction_data[mask]
 
-    outfile = "predictions.csv"
-    outfile_probs = "predictions_probs.csv"
+    os.makedirs(output_dir, exist_ok=True)
+    outfile = f"{output_dir}/predictions.csv"
+    outfile_probs = f"{output_dir}/predictions_probs.csv"
 
     n_class = 33
     n_view = 7
