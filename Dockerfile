@@ -17,15 +17,15 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy install packages
-RUN pip3 install numpy pandas scikit-learn laspy matplotlib requests tqdm
+RUN pip3 install numpy pandas scikit-learn laspy matplotlib requests tqdm pydantic pydantic-settings
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 #RUN pip3 install fastapi uvicorn
 RUN pip3 install lazrs[all]
 
 # Copy your code
-COPY *.py /app/
-COPY model_ft_202412171652_3 /app/
-COPY lookup.csv /app/
+COPY src/*.py /app/
+COPY src/model_ft_202412171652_3 /app/
+COPY src/lookup.csv /app/
 
 
 # Set environment variable for torch cache
@@ -41,7 +41,7 @@ RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
 RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; time.sleep(2.5)"
 
 # Set entrypoint
-ENTRYPOINT ["python", "predict.py"]
+CMD ["python3", "run.py"]
 #ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # docker build -t detailview .

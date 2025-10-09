@@ -6,7 +6,9 @@ predict_*
 .Rhistory
 loss_*
 test_predictions.csv
-.spyproject/
+.spyproject/*
+run_docker.sh
+__pycache__/*
 
 # Compiled python files
 *.py[oc]

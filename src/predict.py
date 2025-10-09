@@ -1,17 +1,8 @@
 from datetime import datetime
+from parameters import Parameters
 
-def run_predict(
-    prediction_data,
-    path_las="",
-    model_path="./model_ft_202412171652_3",
-    tree_id_col="TreeID",
-    n_aug=10,
-    output_dir="/output",
-    path_csv_train="default_vals",
-    path_csv_lookup="./lookup.csv",
-    projection_backend="numpy",
-    output_type="csv"
-):
+
+def run_predict(params: Parameters):
     import os
     import torch
     import numpy as np
@@ -20,13 +11,28 @@ def run_predict(
     import laspy
     from datetime import datetime
     import parallel_densenet as net
-    #import datetime
 
-    if os.path.splitext(prediction_data)[1].lower() in ['.las', '.laz']:
+    # Extract parameters from the Parameters object
+    prediction_data = params.dataset_path
+    path_las = params.path_las
+    model_path = params.model_path
+    tree_id_col = params.tree_id_col
+    n_aug = params.n_aug
+    output_dir = params.output_dir
+    path_csv_train = params.path_csv_train
+    path_csv_lookup = params.path_csv_lookup
+    projection_backend = params.projection_backend
+    output_type = params.output_type
+
+    if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
         # check if coordinates exceed float32 mm precision; shift by updating header offsets (avoids OverflowError)
 
-        min_vals = [prediction_data.x.min(), prediction_data.y.min(), prediction_data.z.min()]
+        min_vals = [
+            prediction_data.x.min(),
+            prediction_data.y.min(),
+            prediction_data.z.min(),
+        ]
         if any(abs(val) > 1e5 for val in min_vals):
             data_offset_applied = True
             hdr = prediction_data.header
@@ -54,11 +60,16 @@ def run_predict(
     n_workers = 0
 
     if not os.path.exists(model_path):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Model path {model_path} does not exist or was not supplied. Downloading example model...")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] Model path {model_path} does not exist or was not supplied. Downloading example model..."
+        )
         import requests
-        response = requests.get("https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1")
+
+        response = requests.get(
+            "https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1"
+        )
         model_path = "/model_202305171452_60"
-        with open(model_path, 'wb') as f:
+        with open(model_path, "wb") as f:
             f.write(response.content)
 
     if os.path.exists(path_csv_train):
@@ -68,7 +79,9 @@ def run_predict(
     else:
         train_height_mean = 15.2046
         train_height_sd = 9.5494
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] No training data: using default tree height scaling values for inference.")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] No training data: using default tree height scaling values for inference."
+        )
 
     os.environ["OMP_NUM_THREADS"] = "12"
     os.environ["OPENBLAS_NUM_THREADS"] = "12"
@@ -83,40 +96,61 @@ def run_predict(
         if torch.cuda.is_available()
         else "mps"
         if torch.backends.mps.is_available()
-        else "cpu")
+        else "cpu"
+    )
     model.to(device)
     model.eval()
 
-    img_trans = transforms.Compose([
-        transforms.RandomVerticalFlip(0.5)])
+    img_trans = transforms.Compose([transforms.RandomVerticalFlip(0.5)])
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Model initialized. Prepare dataset...")
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] Model initialized. Prepare dataset..."
+    )
 
     test_dataset = net.TrainDataset_AllChannels(
-        prediction_data, path_las, img_trans=img_trans, pc_rotate=True,
-        height_noise=0.01, test=True, res=res, n_sides=n_sides,
-        height_mean=train_height_mean, height_sd=train_height_sd,
-        tree_id_col=tree_id_col, projection_backend=projection_backend)
+        prediction_data,
+        path_las,
+        img_trans=img_trans,
+        pc_rotate=True,
+        height_noise=0.01,
+        test=True,
+        res=res,
+        n_sides=n_sides,
+        height_mean=train_height_mean,
+        height_sd=train_height_sd,
+        tree_id_col=tree_id_col,
+        projection_backend=projection_backend,
+    )
     test_dataloader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=int(n_batch), shuffle=False, pin_memory=True, num_workers=n_workers)
+        test_dataset,
+        batch_size=int(n_batch),
+        shuffle=False,
+        pin_memory=True,
+        num_workers=n_workers,
+    )
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Dataset with {len(test_dataset)} trees prepared. Start predictions...")
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] Dataset with {len(test_dataset)} trees prepared. Start predictions..."
+    )
 
     all_paths = test_dataset.trees_frame.iloc[:, 0]
     data_probs = {path: [] for path in all_paths}
 
     for epoch in range(int(n_aug)):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] epoch: {epoch + 1} / {int(n_aug)}")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] epoch: {epoch + 1} / {int(n_aug)}"
+        )
         if epoch == 0:
             prev_argmax = {path: None for path in all_paths}
 
         try:
             from tqdm.auto import tqdm
+
             _iterable = tqdm(
                 test_dataloader,
                 total=len(test_dataloader),
                 desc=f"Aug {epoch + 1}/{int(n_aug)}",
-                leave=False
+                leave=False,
             )
         except Exception:
             _iterable = test_dataloader
@@ -137,26 +171,39 @@ def run_predict(
         for path, probs in data_probs.items():
             cls = None if not any(probs) else int(np.argmax(probs))
             curr_argmax[path] = cls
-            if prev_argmax.get(path) is not None and cls is not None and cls != prev_argmax[path]:
+            if (
+                prev_argmax.get(path) is not None
+                and cls is not None
+                and cls != prev_argmax[path]
+            ):
                 changes += 1
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] aggregation changes vs. previous epoch: {changes}")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] aggregation changes vs. previous epoch: {changes}"
+        )
         prev_argmax = curr_argmax
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Predictions done. Preparing and writing outputs...")
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] Predictions done. Preparing and writing outputs..."
+    )
 
     max_prob_class = {key: np.argmax(array) for key, array in data_probs.items()}
-    max_prob = {key: (array.max() / array.sum()) if np.any(array) else 0.0 for key, array in data_probs.items()}
-    df = pd.DataFrame({
-        "filename": list(max_prob_class.keys()),
-        "species_id": list(max_prob_class.values()),
-        "species_prob": list(max_prob.values())
-    })
+    max_prob = {
+        key: (array.max() / array.sum()) if np.any(array) else 0.0
+        for key, array in data_probs.items()
+    }
+    df = pd.DataFrame(
+        {
+            "filename": list(max_prob_class.keys()),
+            "species_id": list(max_prob_class.values()),
+            "species_prob": list(max_prob.values()),
+        }
+    )
 
     lookup = pd.read_csv(path_csv_lookup)
-    joined = pd.merge(df, lookup, on='species_id')
+    joined = pd.merge(df, lookup, on="species_id")
 
-    data_probs_df = pd.DataFrame.from_dict(data_probs, orient='index').reset_index()
-    col_labels = lookup['species']
+    data_probs_df = pd.DataFrame.from_dict(data_probs, orient="index").reset_index()
+    col_labels = lookup["species"]
     data_probs_df.columns = pd.concat([pd.Series(["File"]), col_labels])
     if output_type in ["csv", "both"]:
         joined.to_csv(outfile, index=False)
@@ -165,12 +212,16 @@ def run_predict(
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Wrote: {outfile_probs}")
     if output_type in ["las", "both"]:
         if not isinstance(prediction_data, laspy.LasData):
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Error: prediction_data must be provided as a single LAS/LAZ file to output LAS with predictions.")
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] Error: prediction_data must be provided as a single LAS/LAZ file to output LAS with predictions."
+            )
         else:
             prediction_data.add_extra_dim(
-                laspy.ExtraBytesParams(name="species_id", type=np.uint8))
+                laspy.ExtraBytesParams(name="species_id", type=np.uint8)
+            )
             prediction_data.add_extra_dim(
-                laspy.ExtraBytesParams(name="species_prob", type=np.float32))
+                laspy.ExtraBytesParams(name="species_prob", type=np.float32)
+            )
             species_ids = np.zeros(prediction_data.X.shape[0], dtype=np.uint8)
             species_probs = np.zeros(prediction_data.X.shape[0], dtype=np.float32)
             # Vectorized assignment by mapping point TreeIDs to predictions
@@ -184,9 +235,15 @@ def run_predict(
             _prob_map = joined.set_index("tree_id")["species_prob"].astype(np.float32)
 
             # map for all points in one shot
-            _point_tids = pd.Series(np.asarray(prediction_data[tree_id_col]), copy=False)
-            species_ids = _point_tids.map(_species_map).fillna(255).astype(np.uint8).to_numpy()
-            species_probs = _point_tids.map(_prob_map).fillna(0.0).astype(np.float32).to_numpy()
+            _point_tids = pd.Series(
+                np.asarray(prediction_data[tree_id_col]), copy=False
+            )
+            species_ids = (
+                _point_tids.map(_species_map).fillna(255).astype(np.uint8).to_numpy()
+            )
+            species_probs = (
+                _point_tids.map(_prob_map).fillna(0.0).astype(np.float32).to_numpy()
+            )
             prediction_data.species_id = species_ids
             prediction_data.species_prob = species_probs
 
@@ -205,32 +262,18 @@ def run_predict(
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Wrote: {outlas_path}")
     return outfile, outfile_probs, joined, data_probs_df
 
+
 # For CLI usage
 if __name__ == "__main__":
     # record starting time
     t0 = datetime.now()
     print(f"Start time: {t0.strftime('%Y-%m-%d %H:%M:%S')}")
-    import argparse
-    parser = argparse.ArgumentParser(description="Tree species prediction")
-    parser.add_argument('--prediction_data', type=str, default=r"/input/circle_3_segmented.las")
-    parser.add_argument('--path_las', type=str, default="")
-    parser.add_argument('--model_path', type=str, default="./model_ft_202412171652_3")
-    parser.add_argument('--tree_id_col', type=str, default='TreeID')
-    parser.add_argument('--n_aug', type=int, default=10)
-    parser.add_argument('--output_dir', type=str, default="/output")
-    parser.add_argument('--projection_backend', type=str, default="numpy", choices=["torch", "numpy"])
-    parser.add_argument('--output_type', type=str, default="csv", choices=["csv", "las", "both"])
-    args = parser.parse_args()
-    run_predict(
-        args.prediction_data,
-        path_las=args.path_las,
-        model_path=args.model_path,
-        tree_id_col=args.tree_id_col,
-        n_aug=args.n_aug,
-        output_dir=args.output_dir,
-        projection_backend=args.projection_backend,
-        output_type=args.output_type
-    )
+
+    # Load parameters from CLI/env
+    params = Parameters()
+
+    run_predict(params)
+
     t1 = datetime.now()
     print(f"End time: {t1.strftime('%Y-%m-%d %H:%M:%S')}")
     # print elapsed time
