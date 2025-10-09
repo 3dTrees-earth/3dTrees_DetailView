@@ -49,8 +49,8 @@ def run_predict(params: Parameters):
         # mask = np.isin(prediction_data[tree_id_col], ids)
         # prediction_data = prediction_data[mask]
 
-    outfile = f"{output_dir}/predictions_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}_.csv"
-    outfile_probs = f"{output_dir}/predictions_probs{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}_.csv"
+    outfile = "predictions.csv"
+    outfile_probs = "predictions_probs.csv"
 
     n_class = 33
     n_view = 7
@@ -261,7 +261,7 @@ def run_predict(params: Parameters):
                 )
                 prediction_data = laspy.LasData(hdr, prediction_data.points)
 
-            outlas_path = f"{output_dir}/predictions_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}_.laz"
+            outlas_path = f"{output_dir}/pc_with_species.laz"
             prediction_data.write(outlas_path)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Wrote: {outlas_path}")
     return outfile, outfile_probs, joined, data_probs_df
