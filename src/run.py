@@ -21,8 +21,8 @@ def main():
     print(f"Output directory: {params.output_dir}")
 
     # rename the input file to input.laz
-    os.rename(params.dataset_path, "input.laz")
-    params.dataset_path = "input.laz"
+    os.rename(params.dataset_path, "/in/input.laz")
+    params.dataset_path = "/in/input.laz"
 
     run_predict(params)
 
