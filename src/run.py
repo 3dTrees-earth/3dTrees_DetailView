@@ -3,6 +3,7 @@ import sys
 from datetime import datetime
 from parameters import Parameters
 from predict import run_predict
+import shutil
 
 
 def main():
@@ -12,6 +13,7 @@ def main():
     params = Parameters()
 
     # Validate input file exists
+    shutil.copy(params.dataset_path, "/in/input.laz")
     if not os.path.isfile(params.dataset_path):
         print(f"Input file not found: {params.dataset_path}")
         sys.exit(2)
