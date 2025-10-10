@@ -42,6 +42,7 @@ RUN wget -O /app/model_ft_202412171652_3 \
     https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
 
 RUN mkdir -p /out && chmod -R 777 /out
+RUN mkdir -p /in && chmod -R 777 /in
 
 RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; time.sleep(2.5)"
 

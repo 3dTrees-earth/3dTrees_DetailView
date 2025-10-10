@@ -16,6 +16,12 @@ def main():
         print(f"Input file not found: {params.dataset_path}")
         sys.exit(2)
 
+    # Rename the input file to /in/input.laz for consistency
+    target_input = "/in/input.laz"
+    if os.path.abspath(params.dataset_path) != target_input:
+        os.rename(params.dataset_path, target_input)
+        params.dataset_path = target_input
+
     # Run prediction
     print(f"Running prediction on: {params.dataset_path}")
     print(f"Output directory: {params.output_dir}")
