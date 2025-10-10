@@ -99,6 +99,11 @@ def run_predict(params: Parameters):
         if torch.backends.mps.is_available()
         else "cpu"
     )
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Using device: {device}")
+    if device == "cuda":
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] GPU: {torch.cuda.get_device_name(0)}"
+        )
     model.to(device)
     model.eval()
 
