@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install python and pip
 RUN apt-get update && \
-    apt-get install -y python3-pip python3-dev && \
+    apt-get install -y python3-pip python3-dev wget && \
     rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
@@ -13,6 +13,17 @@ COPY requirements.txt .
 RUN pip3 install --upgrade pip \
     && pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 \
     && pip3 install --no-cache-dir -r requirements.txt
+
+
+# Copy app code and required assets only
+COPY src/*.py /app/
+COPY src/lookup.csv /app/
+
+# Download model weights (delete wget after)
+RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
+    https://download.pytorch.org/models/densenet201-c1103571.pth && \
+    wget -O /app/model_ft_202412171652_3 \
+    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
 
 # ---
 
@@ -23,30 +34,18 @@ WORKDIR /app
 
 # Install python and pip
 RUN apt-get update && \
-    apt-get install -y python3-pip python3-dev libgl1 libglx-mesa0 && \
+    apt-get install -y libgl1 libglx-mesa0 && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder
 COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy app code and required assets only
-COPY src/*.py /app/
-COPY src/lookup.csv /app/
+COPY --from=builder /app /app
 
 # ENV and cache setup
 ENV TORCH_HOME=/app/torch_cache
 RUN mkdir -p /app/torch_cache/hub/checkpoints
-
-# Download model weights (delete wget after)
-RUN apt-get update && apt-get install -y wget && \
-    wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
-    https://download.pytorch.org/models/densenet201-c1103571.pth && \
-    wget -O /app/model_ft_202412171652_3 \
-    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1 && \
-    apt-get purge -y wget && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
 
 # Create input/output directories
 RUN mkdir -p /out && chmod -R 777 /out && \
