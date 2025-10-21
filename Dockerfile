@@ -37,7 +37,7 @@ WORKDIR /app
 
 # Install minimal runtime dependencies only
 RUN apt-get update && \
-    apt-get install -y libgl1 libglx-mesa0 && \
+    apt-get install -y libexpat1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy complete Python installation from builder
