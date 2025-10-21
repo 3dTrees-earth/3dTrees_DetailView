@@ -19,7 +19,10 @@ RUN pip3 install --upgrade pip \
 COPY src/*.py /app/
 COPY src/lookup.csv /app/
 
-# Download model weights (delete wget after)
+# Create directories for model weights
+RUN mkdir -p /app/torch_cache/hub/checkpoints
+
+# Download model weights
 RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
     https://download.pytorch.org/models/densenet201-c1103571.pth && \
     wget -O /app/model_ft_202412171652_3 \
@@ -32,12 +35,14 @@ FROM nvidia/cuda:12.9.0-cudnn-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# Install python and pip
+# Install minimal runtime dependencies only
 RUN apt-get update && \
     apt-get install -y libgl1 libglx-mesa0 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy installed Python packages from builder
+# Copy complete Python installation from builder
+COPY --from=builder /usr/bin/python3* /usr/bin/
+COPY --from=builder /usr/lib/python3.10 /usr/lib/python3.10
 COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
