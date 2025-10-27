@@ -25,15 +25,16 @@ RUN mkdir -p /app/torch_cache/hub/checkpoints
 # Download model weights
 RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
     https://download.pytorch.org/models/densenet201-c1103571.pth && \
-    wget -O /app/model_ft_202412171652_3 \
-    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1
+    wget -O /app/model_europe_v1 \
+    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_ft_202412171652_3?download=1 && \
+    wget -O /app/model_global_v1 \
+    https://freidata.uni-freiburg.de/records/f850a-bb152/files/model_202305171452_60?download=1
 
 # ---
 
 # Final stage: minimal runtime
 FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 
-WORKDIR /app
 
 # Install minimal runtime dependencies only
 RUN apt-get update && \
@@ -56,4 +57,6 @@ RUN mkdir -p /app/torch_cache/hub/checkpoints
 RUN mkdir -p /out && chmod -R 777 /out && \
     mkdir -p /in && chmod -R 777 /in
 
-ENTRYPOINT ["python3", "run.py"]
+WORKDIR /app
+
+CMD ["python3", "run.py"]

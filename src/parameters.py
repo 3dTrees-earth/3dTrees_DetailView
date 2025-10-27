@@ -19,7 +19,7 @@ class Parameters(BaseSettings):
     )
 
     model_path: str = Field(
-        "/app/model_ft_202412171652_3",
+        "/app/model_europe_v1",
         description="Path to trained model file",
         alias=AliasChoices("model-path", "model_path"),
     )
