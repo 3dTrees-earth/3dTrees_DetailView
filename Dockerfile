@@ -1,5 +1,5 @@
 # Build stage (optional, if you need to compile wheels)
-FROM nvidia/cuda:12.9.0-cudnn-runtime-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN apt-get update && \
 # Install dependencies
 COPY requirements.txt .
 RUN pip3 install --upgrade pip \
-    && pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 \
+    && pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu128 \
     && pip3 install --no-cache-dir -r requirements.txt
 
 
@@ -55,8 +55,5 @@ RUN mkdir -p /app/torch_cache/hub/checkpoints
 # Create input/output directories
 RUN mkdir -p /out && chmod -R 777 /out && \
     mkdir -p /in && chmod -R 777 /in
-
-# Test torch
-RUN python3 -c "import torch; print(torch.cuda.is_available()); import time; time.sleep(2.5)"
 
 ENTRYPOINT ["python3", "run.py"]
