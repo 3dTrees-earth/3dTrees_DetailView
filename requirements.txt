@@ -1,0 +1,14 @@
+numpy
+pandas
+scikit-learn
+laspy
+matplotlib
+requests
+tqdm
+pydantic
+pydantic-settings
+torch
+torchvision
+torchaudio
+lazrs[all]
+
