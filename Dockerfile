@@ -31,7 +31,7 @@ RUN wget -O /app/torch_cache/hub/checkpoints/densenet201-c1103571.pth \
 # ---
 
 # Final stage: minimal runtime
-FROM nvidia/cuda:12.9.0-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 
 WORKDIR /app
 
