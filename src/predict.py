@@ -26,6 +26,7 @@ def run_predict(params: Parameters):
 
     if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
+        data_offset_applied = False
         # check if coordinates exceed float32 mm precision; shift by updating header offsets (avoids OverflowError)
 
         min_vals = [
