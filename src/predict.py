@@ -12,6 +12,8 @@ def run_predict(params: Parameters):
     from datetime import datetime
     import parallel_densenet as net
 
+    data_offset_applied = False
+
     # Extract parameters from the Parameters object
     prediction_data = params.dataset_path
     path_las = params.path_las
@@ -26,7 +28,7 @@ def run_predict(params: Parameters):
 
     if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
-        data_offset_applied = False
+
         # check if coordinates exceed float32 mm precision; shift by updating header offsets (avoids OverflowError)
 
         min_vals = [
