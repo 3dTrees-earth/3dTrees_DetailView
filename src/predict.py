@@ -38,12 +38,14 @@ def run_predict(params: Parameters):
         ]
         if any(abs(val) > 1e5 for val in min_vals):
             data_offset_applied = True
+            # Modify header offsets (all attributes are preserved via prediction_data.points)
             hdr = prediction_data.header
             hdr.offsets = (
                 hdr.offsets[0] - min_vals[0],
                 hdr.offsets[1] - min_vals[1],
                 hdr.offsets[2] - min_vals[2],
             )
+            # Create new LasData with modified header - all attributes preserved via points array
             prediction_data = laspy.LasData(hdr, prediction_data.points)
 
         # exclude prediction_data were TreeID == 0
@@ -58,7 +60,6 @@ def run_predict(params: Parameters):
 
     n_class = 33
     n_view = 7
-    n_batch = 2**2
     res = 256
     n_sides = n_view - 3
     n_workers = 0
@@ -107,8 +108,31 @@ def run_predict(params: Parameters):
         print(
             f"[{datetime.now().strftime('%H:%M:%S')}] GPU: {torch.cuda.get_device_name(0)}"
         )
+    
+    # Auto-detect batch size based on GPU memory
+    if device == "cuda":
+        # Auto-detect batch size based on available GPU memory
+        total_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        if total_memory_gb >= 16:
+            n_batch = 10  # Large GPU (16GB+)
+        else:
+            n_batch = 10  # Small GPU (<16GB)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-detected batch size: {n_batch} (GPU memory: {total_memory_gb:.2f} GB)")
+    else:
+        n_batch = 2  # Default for CPU/MPS
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Using default batch size: {n_batch} (CPU/MPS)")
+    
     model.to(device)
     model.eval()
+    
+    # Clear GPU cache before starting
+    if device == "cuda":
+        torch.cuda.empty_cache()
+        total_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+        allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+        reserved = torch.cuda.memory_reserved(0) / 1024**3  # GB
+        free_memory = total_memory - allocated
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] GPU memory: Total: {total_memory:.2f} GB, Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB, Available: {free_memory:.2f} GB")
 
     img_trans = transforms.Compose([transforms.RandomVerticalFlip(0.5)])
 
@@ -138,9 +162,17 @@ def run_predict(params: Parameters):
         num_workers=n_workers,
     )
 
+    num_batches = len(test_dataloader)
+    num_trees = len(test_dataset)
     print(
-        f"[{datetime.now().strftime('%H:%M:%S')}] Dataset with {len(test_dataset)} trees prepared. Start predictions..."
+        f"[{datetime.now().strftime('%H:%M:%S')}] Dataset prepared: {num_trees} trees, {num_batches} batches (batch_size={n_batch})"
     )
+    if device == "cuda":
+        total_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+        allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+        free_memory = total_memory - allocated
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] GPU memory available: {free_memory:.2f} GB / {total_memory:.2f} GB")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Start predictions...")
 
     all_paths = test_dataset.trees_frame.iloc[:, 0]
     data_probs = {path: [] for path in all_paths}
@@ -164,16 +196,22 @@ def run_predict(params: Parameters):
         except Exception:
             _iterable = test_dataloader
 
-        for b, t_data in enumerate(_iterable, 0):
-            t_inputs, t_heights, t_paths = t_data
-            t_inputs, t_heights = t_inputs.to(device), t_heights.to(device)
-            t_preds = model(t_inputs, t_heights)
-            t_probs = torch.nn.functional.softmax(t_preds, dim=1).cpu().detach().numpy()
-            for j, path in enumerate(t_paths):
-                if not any(data_probs[path]):
-                    data_probs[path] = t_probs[j, :]
-                else:
-                    data_probs[path] += t_probs[j, :]
+        with torch.no_grad():  # Disabled for comparison - gradients will be computed (uses more memory)
+            for b, t_data in enumerate(_iterable, 0):
+                t_inputs, t_heights, t_paths = t_data
+                t_inputs, t_heights = t_inputs.to(device), t_heights.to(device)
+                t_preds = model(t_inputs, t_heights)
+                t_probs = torch.nn.functional.softmax(t_preds, dim=1).cpu().detach().numpy()
+                # Clear GPU tensors after moving to CPU (but don't clear cache every batch)
+                del t_inputs, t_heights, t_preds
+                # Only clear cache every 100 batches to reduce overhead while preventing accumulation
+                if device == "cuda" and (b + 1) % 100 == 0:
+                    torch.cuda.empty_cache()
+                for j, path in enumerate(t_paths):
+                    if not any(data_probs[path]):
+                        data_probs[path] = t_probs[j, :]
+                    else:
+                        data_probs[path] += t_probs[j, :]
 
         changes = 0
         curr_argmax = {}
@@ -190,6 +228,10 @@ def run_predict(params: Parameters):
             f"[{datetime.now().strftime('%H:%M:%S')}] aggregation changes vs. previous epoch: {changes}"
         )
         prev_argmax = curr_argmax
+        
+        # Clear GPU cache between epochs to prevent memory accumulation
+        if device == "cuda":
+            torch.cuda.empty_cache()
 
     print(
         f"[{datetime.now().strftime('%H:%M:%S')}] Predictions done. Preparing and writing outputs..."
