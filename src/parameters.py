@@ -66,6 +66,18 @@ class Parameters(BaseSettings):
         alias=AliasChoices("output-type", "output_type"),
     )
 
+    output_species_id_dim: str = Field(
+        "species_id",
+        description="Name of the LAS extra dimension used for predicted species IDs",
+        alias=AliasChoices("output-species-id-dim", "output_species_id_dim"),
+    )
+
+    output_species_prob_dim: str = Field(
+        "species_prob",
+        description="Name of the LAS extra dimension used for predicted species probabilities",
+        alias=AliasChoices("output-species-prob-dim", "output_species_prob_dim"),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="PREDICT_",
         cli_parse_args=True,

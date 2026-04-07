@@ -25,6 +25,13 @@ def run_predict(params: Parameters):
     path_csv_lookup = params.path_csv_lookup
     projection_backend = params.projection_backend
     output_type = params.output_type
+    output_species_id_dim = params.output_species_id_dim
+    output_species_prob_dim = params.output_species_prob_dim
+
+    if output_species_id_dim == output_species_prob_dim:
+        raise ValueError(
+            "output_species_id_dim and output_species_prob_dim must be different."
+        )
 
     if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
@@ -272,10 +279,10 @@ def run_predict(params: Parameters):
             )
         else:
             prediction_data.add_extra_dim(
-                laspy.ExtraBytesParams(name="species_id", type=np.uint8)
+                laspy.ExtraBytesParams(name=output_species_id_dim, type=np.uint8)
             )
             prediction_data.add_extra_dim(
-                laspy.ExtraBytesParams(name="species_prob", type=np.float32)
+                laspy.ExtraBytesParams(name=output_species_prob_dim, type=np.float32)
             )
             species_ids = np.zeros(prediction_data.X.shape[0], dtype=np.uint8)
             species_probs = np.zeros(prediction_data.X.shape[0], dtype=np.float32)
@@ -299,8 +306,8 @@ def run_predict(params: Parameters):
             species_probs = (
                 _point_tids.map(_prob_map).fillna(0.0).astype(np.float32).to_numpy()
             )
-            prediction_data.species_id = species_ids
-            prediction_data.species_prob = species_probs
+            prediction_data[output_species_id_dim] = species_ids
+            prediction_data[output_species_prob_dim] = species_probs
 
             # revert offsetting if applied before
             if data_offset_applied:
