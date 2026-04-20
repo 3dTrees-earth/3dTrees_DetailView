@@ -41,6 +41,15 @@ RUN apt-get update && \
     apt-get install -y libexpat1 && \
     rm -rf /var/lib/apt/lists/*
 
+# Cache dirs for arbitrary numeric runtime UIDs.
+ENV HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache \
+    FONTCONFIG_CACHE=/tmp/.fontconfig \
+    MPLCONFIGDIR=/tmp/.matplotlib \
+    NUMBA_CACHE_DIR=/tmp/.numba \
+    TORCHINDUCTOR_CACHE_DIR=/tmp/.torchinductor \
+    TORCH_HOME=/app/torch_cache
+
 # Copy complete Python installation from builder
 COPY --from=builder /usr/bin/python3* /usr/bin/
 COPY --from=builder /usr/lib/python3.10 /usr/lib/python3.10
@@ -49,9 +58,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY --from=builder /app /app
 
-# ENV and cache setup
-ENV TORCH_HOME=/app/torch_cache
-RUN mkdir -p /app/torch_cache/hub/checkpoints
+# Cache setup
+RUN mkdir -p /app/torch_cache/hub/checkpoints \
+    /tmp/.cache /tmp/.fontconfig /tmp/.matplotlib /tmp/.numba /tmp/.torchinductor \
+    && chmod -R 777 /app/torch_cache /tmp/.cache /tmp/.fontconfig /tmp/.matplotlib /tmp/.numba /tmp/.torchinductor
 
 # Create input/output directories
 RUN mkdir -p /out && chmod -R 777 /out && \

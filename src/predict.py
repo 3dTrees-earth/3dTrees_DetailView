@@ -7,10 +7,8 @@ def run_predict(params: Parameters):
     import torch
     import numpy as np
     import pandas as pd
-    from torchvision import transforms
     import laspy
     from datetime import datetime
-    import parallel_densenet as net
 
     data_offset_applied = False
 
@@ -95,14 +93,26 @@ def run_predict(params: Parameters):
             f"[{datetime.now().strftime('%H:%M:%S')}] No training data: using default tree height scaling values for inference."
         )
 
-    os.environ["OMP_NUM_THREADS"] = "12"
-    os.environ["OPENBLAS_NUM_THREADS"] = "12"
-    os.environ["MKL_NUM_THREADS"] = "12"
-    os.environ["VECLIB_MAXIMUM_THREADS"] = "12"
-    os.environ["NUMEXPR_NUM_THREADS"] = "12"
+    os.environ["OMP_NUM_THREADS"] = "20"
+    os.environ["OPENBLAS_NUM_THREADS"] = "20"
+    os.environ["MKL_NUM_THREADS"] = "20"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "20"
+    os.environ["NUMEXPR_NUM_THREADS"] = "20"
 
-    model = net.SimpleView(n_classes=n_class, n_views=n_view)
-    model.load_state_dict(torch.load(model_path))
+    # Provide writable cache locations for arbitrary runtime UIDs.
+    # Also prefer the model checkpoint cache baked into the container to avoid
+    # redownloading pretrained DenseNet weights at runtime.
+    cache_root = os.environ.get("_GALAXY_JOB_TMP_DIR") or os.environ.get("TMPDIR") or "/tmp"
+    torch_home = "/app/torch_cache" if os.path.isdir("/app/torch_cache") else cache_root
+    os.environ.setdefault("HOME", cache_root)
+    os.environ.setdefault("XDG_CACHE_HOME", os.path.join(cache_root, ".cache"))
+    os.environ.setdefault("TORCH_HOME", torch_home)
+    os.environ.setdefault(
+        "TORCHINDUCTOR_CACHE_DIR", os.path.join(cache_root, "torchinductor-cache")
+    )
+    os.makedirs(os.environ["XDG_CACHE_HOME"], exist_ok=True)
+    os.makedirs(os.environ["TORCHINDUCTOR_CACHE_DIR"], exist_ok=True)
+
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -110,6 +120,11 @@ def run_predict(params: Parameters):
         if torch.backends.mps.is_available()
         else "cpu"
     )
+    import parallel_densenet as net
+    from torchvision import transforms
+
+    model = net.SimpleView(n_classes=n_class, n_views=n_view)
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Using device: {device}")
     if device == "cuda":
         print(
@@ -165,7 +180,7 @@ def run_predict(params: Parameters):
         test_dataset,
         batch_size=int(n_batch),
         shuffle=False,
-        pin_memory=True,
+        pin_memory=(device == "cuda"),
         num_workers=n_workers,
     )
 
