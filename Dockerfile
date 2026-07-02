@@ -50,8 +50,16 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app /app
 
 # ENV and cache setup
-ENV TORCH_HOME=/app/torch_cache
-RUN mkdir -p /app/torch_cache/hub/checkpoints
+ENV HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache \
+    FONTCONFIG_CACHE=/tmp/.fontconfig \
+    MPLCONFIGDIR=/tmp/.matplotlib \
+    NUMBA_CACHE_DIR=/tmp/.numba \
+    TORCHINDUCTOR_CACHE_DIR=/tmp/.torchinductor \
+    TORCH_HOME=/app/torch_cache
+RUN mkdir -p /app/torch_cache/hub/checkpoints && \
+    chmod -R a+rX /app && \
+    chmod -R a+rwX /app/torch_cache
 
 # Create input/output directories
 RUN mkdir -p /out && chmod -R 777 /out && \

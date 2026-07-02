@@ -233,10 +233,12 @@ def run_predict(params: Parameters):
     else:
         n_batch = 2  # Default for CPU/MPS
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Using default batch size: {n_batch} (CPU/MPS)")
-    
+
+    model = net.SimpleView(n_classes=n_class, n_views=n_view)
+    model.load_state_dict(torch.load(model_path))
     model.to(device)
     model.eval()
-    
+
     # Clear GPU cache before starting
     if device == "cuda":
         torch.cuda.empty_cache()
