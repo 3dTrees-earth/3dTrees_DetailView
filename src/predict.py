@@ -2,17 +2,103 @@ from datetime import datetime
 from parameters import Parameters
 
 
+def _timestamp():
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _ensure_las_dimension(las_data, name, dtype, laspy):
+    if name not in list(las_data.point_format.dimension_names):
+        las_data.add_extra_dim(laspy.ExtraBytesParams(name=name, type=dtype))
+
+
+def _count_valid_las_trees(las_data, tree_id_col, min_points, np, pd):
+    if tree_id_col not in list(las_data.point_format.dimension_names):
+        return None
+
+    tree_ids = np.asarray(las_data[tree_id_col])
+    valid_tree_ids = tree_ids[tree_ids > 0]
+    if len(valid_tree_ids) == 0:
+        return 0
+
+    counts = pd.Series(valid_tree_ids.astype(np.int64, copy=False)).value_counts()
+    return int((counts >= min_points).sum())
+
+
+def _restore_coordinate_offsets(las_data, min_vals):
+    if min_vals is None:
+        return las_data
+
+    hdr = las_data.header
+    hdr.offsets = (
+        hdr.offsets[0] + min_vals[0],
+        hdr.offsets[1] + min_vals[1],
+        hdr.offsets[2] + min_vals[2],
+    )
+    return las_data.__class__(hdr, las_data.points)
+
+
+def _write_empty_outputs(
+    *,
+    prediction_data,
+    output_type,
+    output_dir,
+    outfile,
+    outfile_probs,
+    lookup,
+    output_species_id_dim,
+    output_species_prob_dim,
+    min_vals,
+    laspy,
+    np,
+    pd,
+):
+    joined = pd.DataFrame(
+        columns=["filename", "species_id", "species_prob", "tree_H", "species"]
+    )
+    data_probs_df = pd.DataFrame(columns=["File", *lookup["species"].tolist()])
+
+    if output_type in ["csv", "both"]:
+        joined.to_csv(outfile, index=False)
+        data_probs_df.to_csv(outfile_probs, index=False)
+        print(f"[{_timestamp()}] Wrote empty predictions: {outfile}")
+        print(f"[{_timestamp()}] Wrote empty probabilities: {outfile_probs}")
+
+    if output_type in ["las", "both"]:
+        if not isinstance(prediction_data, laspy.LasData):
+            print(
+                f"[{_timestamp()}] Error: prediction_data must be provided as a single LAS/LAZ file to output LAS with predictions."
+            )
+        else:
+            _ensure_las_dimension(
+                prediction_data, output_species_id_dim, np.uint8, laspy
+            )
+            _ensure_las_dimension(
+                prediction_data, output_species_prob_dim, np.float32, laspy
+            )
+            point_count = len(prediction_data.points)
+            prediction_data[output_species_id_dim] = np.full(
+                point_count, 255, dtype=np.uint8
+            )
+            prediction_data[output_species_prob_dim] = np.zeros(
+                point_count, dtype=np.float32
+            )
+            prediction_data = _restore_coordinate_offsets(prediction_data, min_vals)
+
+            outlas_path = f"{output_dir}/pc_with_species.laz"
+            prediction_data.write(outlas_path)
+            print(f"[{_timestamp()}] Wrote skipped LAS/LAZ output: {outlas_path}")
+
+    return outfile, outfile_probs, joined, data_probs_df
+
+
 def run_predict(params: Parameters):
     import os
-    import torch
     import numpy as np
     import pandas as pd
-    from torchvision import transforms
     import laspy
     from datetime import datetime
-    import parallel_densenet as net
 
-    data_offset_applied = False
+    min_vals = None
 
     # Extract parameters from the Parameters object
     prediction_data = params.dataset_path
@@ -38,19 +124,24 @@ def run_predict(params: Parameters):
 
         # check if coordinates exceed float32 mm precision; shift by updating header offsets (avoids OverflowError)
 
-        min_vals = [
-            prediction_data.x.min(),
-            prediction_data.y.min(),
-            prediction_data.z.min(),
-        ]
-        if any(abs(val) > 1e5 for val in min_vals):
-            data_offset_applied = True
+        if len(prediction_data.points) > 0:
+            min_vals_candidate = [
+                prediction_data.x.min(),
+                prediction_data.y.min(),
+                prediction_data.z.min(),
+            ]
+        else:
+            min_vals_candidate = None
+        if min_vals_candidate is not None and any(
+            abs(val) > 1e5 for val in min_vals_candidate
+        ):
+            min_vals = min_vals_candidate
             # Modify header offsets (all attributes are preserved via prediction_data.points)
             hdr = prediction_data.header
             hdr.offsets = (
-                hdr.offsets[0] - min_vals[0],
-                hdr.offsets[1] - min_vals[1],
-                hdr.offsets[2] - min_vals[2],
+                hdr.offsets[0] - min_vals_candidate[0],
+                hdr.offsets[1] - min_vals_candidate[1],
+                hdr.offsets[2] - min_vals_candidate[2],
             )
             # Create new LasData with modified header - all attributes preserved via points array
             prediction_data = laspy.LasData(hdr, prediction_data.points)
@@ -65,24 +156,36 @@ def run_predict(params: Parameters):
     outfile = f"{output_dir}/predictions.csv"
     outfile_probs = f"{output_dir}/predictions_probs.csv"
 
+    if isinstance(prediction_data, laspy.LasData):
+        min_points = 50
+        valid_tree_count = _count_valid_las_trees(
+            prediction_data, tree_id_col, min_points, np, pd
+        )
+        if valid_tree_count == 0:
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] No valid tree instances found; skipping species classification for this tile (No trees with >= {min_points} points were found in LAS.)."
+            )
+            lookup = pd.read_csv(path_csv_lookup)
+            return _write_empty_outputs(
+                prediction_data=prediction_data,
+                output_type=output_type,
+                output_dir=output_dir,
+                outfile=outfile,
+                outfile_probs=outfile_probs,
+                lookup=lookup,
+                output_species_id_dim=output_species_id_dim,
+                output_species_prob_dim=output_species_prob_dim,
+                min_vals=min_vals,
+                laspy=laspy,
+                np=np,
+                pd=pd,
+            )
+
     n_class = 33
     n_view = 7
     res = 256
     n_sides = n_view - 3
     n_workers = 0
-
-    if not os.path.exists(model_path):
-        print(
-            f"[{datetime.now().strftime('%H:%M:%S')}] Model path {model_path} does not exist or was not supplied. Downloading example model..."
-        )
-        import requests
-
-        response = requests.get(
-            "https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1"
-        )
-        model_path = "/model_202305171452_60"
-        with open(model_path, "wb") as f:
-            f.write(response.content)
 
     if os.path.exists(path_csv_train):
         train_metadata = pd.read_csv(path_csv_train)
@@ -101,8 +204,10 @@ def run_predict(params: Parameters):
     os.environ["VECLIB_MAXIMUM_THREADS"] = "12"
     os.environ["NUMEXPR_NUM_THREADS"] = "12"
 
-    model = net.SimpleView(n_classes=n_class, n_views=n_view)
-    model.load_state_dict(torch.load(model_path))
+    import torch
+    import parallel_densenet as net
+    from torchvision import transforms
+
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -144,23 +249,61 @@ def run_predict(params: Parameters):
     img_trans = transforms.Compose([transforms.RandomVerticalFlip(0.5)])
 
     print(
-        f"[{datetime.now().strftime('%H:%M:%S')}] Model initialized. Prepare dataset..."
+        f"[{datetime.now().strftime('%H:%M:%S')}] Prepare dataset..."
     )
 
-    test_dataset = net.TrainDataset_AllChannels(
-        prediction_data,
-        path_las,
-        img_trans=img_trans,
-        pc_rotate=True,
-        height_noise=0.01,
-        test=True,
-        res=res,
-        n_sides=n_sides,
-        height_mean=train_height_mean,
-        height_sd=train_height_sd,
-        tree_id_col=tree_id_col,
-        projection_backend=projection_backend,
-    )
+    try:
+        test_dataset = net.TrainDataset_AllChannels(
+            prediction_data,
+            path_las,
+            img_trans=img_trans,
+            pc_rotate=True,
+            height_noise=0.01,
+            test=True,
+            res=res,
+            n_sides=n_sides,
+            height_mean=train_height_mean,
+            height_sd=train_height_sd,
+            tree_id_col=tree_id_col,
+            projection_backend=projection_backend,
+        )
+    except net.NoValidTreesError as exc:
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] No valid tree instances found; skipping species classification for this tile ({exc})."
+        )
+        lookup = pd.read_csv(path_csv_lookup)
+        return _write_empty_outputs(
+            prediction_data=prediction_data,
+            output_type=output_type,
+            output_dir=output_dir,
+            outfile=outfile,
+            outfile_probs=outfile_probs,
+            lookup=lookup,
+            output_species_id_dim=output_species_id_dim,
+            output_species_prob_dim=output_species_prob_dim,
+            min_vals=min_vals,
+            laspy=laspy,
+            np=np,
+            pd=pd,
+        )
+
+    if not os.path.exists(model_path):
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] Model path {model_path} does not exist or was not supplied. Downloading example model..."
+        )
+        import requests
+
+        response = requests.get(
+            "https://freidata.uni-freiburg.de/records/xw42t-6mt03/files/model_202305171452_60?download=1"
+        )
+        model_path = "/model_202305171452_60"
+        with open(model_path, "wb") as f:
+            f.write(response.content)
+
+    model = net.SimpleView(n_classes=n_class, n_views=n_view)
+    model.load_state_dict(torch.load(model_path))
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Model initialized.")
+
     test_dataloader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=int(n_batch),
@@ -309,15 +452,7 @@ def run_predict(params: Parameters):
             prediction_data[output_species_id_dim] = species_ids
             prediction_data[output_species_prob_dim] = species_probs
 
-            # revert offsetting if applied before
-            if data_offset_applied:
-                hdr = prediction_data.header
-                hdr.offsets = (
-                    hdr.offsets[0] + min_vals[0],
-                    hdr.offsets[1] + min_vals[1],
-                    hdr.offsets[2] + min_vals[2],
-                )
-                prediction_data = laspy.LasData(hdr, prediction_data.points)
+            prediction_data = _restore_coordinate_offsets(prediction_data, min_vals)
 
             outlas_path = f"{output_dir}/pc_with_species.laz"
             prediction_data.write(outlas_path)

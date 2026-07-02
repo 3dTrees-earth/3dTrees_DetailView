@@ -21,6 +21,14 @@ import sideview_torch as svt
 import read_las as rl
 
 
+class NoValidTreesError(ValueError):
+    def __init__(self, min_points: int):
+        self.min_points = min_points
+        super().__init__(
+            f"No trees with >= {min_points} points were found in LAS."
+        )
+
+
 # https://github.com/isaaccorley/simpleview-pytorch/blob/main/simpleview_pytorch/simpleview.py
 class SimpleView(nn.Module):
     def __init__(self, n_classes: int, n_views: int):
@@ -172,9 +180,7 @@ class TrainDataset_AllChannels:
             )
             stats = stats[stats["count"] >= min_points]
             if stats.empty:
-                raise ValueError(
-                    f"No trees with >= {min_points} points were found in LAS."
-                )
+                raise NoValidTreesError(min_points)
             heights = (stats["z_max"] - stats["z_min"]).astype(float)
             data = [
                 [f"tree_{int(tid)}", -999, float(h), int(tid)]
