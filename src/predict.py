@@ -113,6 +113,9 @@ def run_predict(params: Parameters):
     output_type = params.output_type
     output_species_id_dim = params.output_species_id_dim
     output_species_prob_dim = params.output_species_prob_dim
+    requested_batch_size = params.batch_size
+    requested_num_workers = params.num_workers
+    requested_pin_memory = params.pin_memory
 
     if output_species_id_dim == output_species_prob_dim:
         raise ValueError(
@@ -185,7 +188,6 @@ def run_predict(params: Parameters):
     n_view = 7
     res = 256
     n_sides = n_view - 3
-    n_workers = 0
 
     if os.path.exists(path_csv_train):
         train_metadata = pd.read_csv(path_csv_train)
@@ -221,18 +223,36 @@ def run_predict(params: Parameters):
             f"[{datetime.now().strftime('%H:%M:%S')}] GPU: {torch.cuda.get_device_name(0)}"
         )
     
-    # Auto-detect batch size based on GPU memory
-    if device == "cuda":
-        # Auto-detect batch size based on available GPU memory
+    if requested_batch_size is not None and requested_batch_size < 1:
+        raise ValueError("batch_size must be at least 1.")
+    if requested_num_workers is not None and requested_num_workers < 0:
+        raise ValueError("num_workers must be at least 0.")
+
+    if requested_batch_size is not None:
+        n_batch = requested_batch_size
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] Using configured batch size: {n_batch}"
+        )
+    elif device == "cuda":
         total_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        if total_memory_gb >= 16:
-            n_batch = 10  # Large GPU (16GB+)
-        else:
-            n_batch = 10  # Small GPU (<16GB)
+        n_batch = 10
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-detected batch size: {n_batch} (GPU memory: {total_memory_gb:.2f} GB)")
     else:
         n_batch = 2  # Default for CPU/MPS
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Using default batch size: {n_batch} (CPU/MPS)")
+
+    if requested_num_workers is not None:
+        n_workers = requested_num_workers
+    elif device == "cuda":
+        n_workers = min(4, os.cpu_count() or 1)
+    else:
+        n_workers = 0
+
+    pin_memory = requested_pin_memory if requested_pin_memory is not None else device == "cuda"
+    non_blocking_transfer = device == "cuda" and pin_memory
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] DataLoader settings: num_workers={n_workers}, pin_memory={pin_memory}"
+    )
     
     # Clear GPU cache before starting
     if device == "cuda":
@@ -307,7 +327,7 @@ def run_predict(params: Parameters):
         test_dataset,
         batch_size=int(n_batch),
         shuffle=False,
-        pin_memory=True,
+        pin_memory=pin_memory,
         num_workers=n_workers,
     )
 
@@ -345,10 +365,11 @@ def run_predict(params: Parameters):
         except Exception:
             _iterable = test_dataloader
 
-        with torch.no_grad():  # Disabled for comparison - gradients will be computed (uses more memory)
+        with torch.inference_mode():
             for b, t_data in enumerate(_iterable, 0):
                 t_inputs, t_heights, t_paths = t_data
-                t_inputs, t_heights = t_inputs.to(device), t_heights.to(device)
+                t_inputs = t_inputs.to(device, non_blocking=non_blocking_transfer)
+                t_heights = t_heights.to(device, non_blocking=non_blocking_transfer)
                 t_preds = model(t_inputs, t_heights)
                 t_probs = torch.nn.functional.softmax(t_preds, dim=1).cpu().detach().numpy()
                 # Clear GPU tensors after moving to CPU (but don't clear cache every batch)

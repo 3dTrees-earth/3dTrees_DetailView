@@ -78,6 +78,24 @@ class Parameters(BaseSettings):
         alias=AliasChoices("output-species-prob-dim", "output_species_prob_dim"),
     )
 
+    batch_size: int | None = Field(
+        None,
+        description="Inference batch size. Larger values improve GPU throughput but use more VRAM; try 10-32 on production CUDA/HPC nodes.",
+        alias=AliasChoices("batch-size", "batch_size"),
+    )
+
+    num_workers: int | None = Field(
+        None,
+        description="Number of DataLoader worker processes. More workers hide CPU projection latency but use more RAM; try 4-8 on production CUDA/HPC nodes.",
+        alias=AliasChoices("num-workers", "num_workers"),
+    )
+
+    pin_memory: bool | None = Field(
+        None,
+        description="Whether DataLoader should use pinned host memory. Enable for CUDA/HPC inference to speed host-to-GPU transfers.",
+        alias=AliasChoices("pin-memory", "pin_memory"),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="PREDICT_",
         cli_parse_args=True,
