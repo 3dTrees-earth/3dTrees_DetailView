@@ -96,6 +96,32 @@ class Parameters(BaseSettings):
         alias=AliasChoices("pin-memory", "pin_memory"),
     )
 
+    early_stop_aug: bool = Field(
+        False,
+        description="Stop augmentation passes early when predictions stabilize. Off by default to preserve fixed n_aug behavior.",
+        alias=AliasChoices("early-stop-aug", "early_stop_aug"),
+    )
+
+    early_stop_min_aug: int = Field(
+        3,
+        description="Minimum augmentation passes before early stopping can trigger.",
+        alias=AliasChoices("early-stop-min-aug", "early_stop_min_aug"),
+    )
+
+    early_stop_patience: int = Field(
+        2,
+        description="Stable augmentation epochs required before stopping early.",
+        alias=AliasChoices("early-stop-patience", "early_stop_patience"),
+    )
+
+    early_stop_change_threshold: int = Field(
+        0,
+        description="Maximum class changes vs. previous epoch still considered stable.",
+        alias=AliasChoices(
+            "early-stop-change-threshold", "early_stop_change_threshold"
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="PREDICT_",
         cli_parse_args=True,

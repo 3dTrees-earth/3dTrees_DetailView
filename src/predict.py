@@ -116,11 +116,21 @@ def run_predict(params: Parameters):
     requested_batch_size = params.batch_size
     requested_num_workers = params.num_workers
     requested_pin_memory = params.pin_memory
+    early_stop_aug = params.early_stop_aug
+    early_stop_min_aug = params.early_stop_min_aug
+    early_stop_patience = params.early_stop_patience
+    early_stop_change_threshold = params.early_stop_change_threshold
 
     if output_species_id_dim == output_species_prob_dim:
         raise ValueError(
             "output_species_id_dim and output_species_prob_dim must be different."
         )
+    if early_stop_min_aug < 1:
+        raise ValueError("early_stop_min_aug must be at least 1.")
+    if early_stop_patience < 1:
+        raise ValueError("early_stop_patience must be at least 1.")
+    if early_stop_change_threshold < 0:
+        raise ValueError("early_stop_change_threshold must be at least 0.")
 
     if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
         prediction_data = laspy.read(prediction_data)
@@ -342,9 +352,14 @@ def run_predict(params: Parameters):
         free_memory = total_memory - allocated
         print(f"[{datetime.now().strftime('%H:%M:%S')}] GPU memory available: {free_memory:.2f} GB / {total_memory:.2f} GB")
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Start predictions...")
+    if early_stop_aug:
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] Augmentation early stopping enabled: min_aug={early_stop_min_aug}, patience={early_stop_patience}, change_threshold={early_stop_change_threshold}"
+        )
 
     all_paths = test_dataset.trees_frame.iloc[:, 0]
     data_probs = {path: [] for path in all_paths}
+    stable_aug_epochs = 0
 
     for epoch in range(int(n_aug)):
         print(
@@ -398,6 +413,18 @@ def run_predict(params: Parameters):
             f"[{datetime.now().strftime('%H:%M:%S')}] aggregation changes vs. previous epoch: {changes}"
         )
         prev_argmax = curr_argmax
+
+        if early_stop_aug and (epoch + 1) >= early_stop_min_aug:
+            if changes <= early_stop_change_threshold:
+                stable_aug_epochs += 1
+            else:
+                stable_aug_epochs = 0
+
+            if stable_aug_epochs >= early_stop_patience:
+                print(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] Stopping augmentations early after {epoch + 1} / {int(n_aug)} epochs."
+                )
+                break
         
         # Clear GPU cache between epochs to prevent memory accumulation
         if device == "cuda":
