@@ -9,7 +9,20 @@ Created on Tue Apr 18 08:55:35 2023
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
-import pandas as pd
+
+
+def _rasterize_depth(x_pos, y_pos, depth, res_im, inverse=False):
+    flat_idx = (x_pos % res_im) * res_im + (y_pos % res_im)
+    if inverse:
+        image_flat = np.full(res_im * res_im, np.inf, dtype=np.float32)
+        np.minimum.at(image_flat, flat_idx, depth.astype(np.float32, copy=False))
+        image_flat[np.isinf(image_flat)] = 0
+    else:
+        image_flat = np.full(res_im * res_im, -np.inf, dtype=np.float32)
+        np.maximum.at(image_flat, flat_idx, depth.astype(np.float32, copy=False))
+        image_flat[np.isneginf(image_flat)] = 0
+    return image_flat.reshape(res_im, res_im)
+
 
 def points_to_images(points, res_im = 256, num_side = 4, plot = False,
                      max_n = 500000, debug = False):
@@ -117,9 +130,6 @@ def topview(points, res_im = 256, inverse = False, plot = False):
     x_max, y_max = np.max(points[:,[0,1]], axis = 0)
     x_med, y_med = np.median(points[:,[0,1]], axis = 0)
     
-    # create an empty numpy array to store the depth image
-    top_image = np.ones((res_im, res_im)) * -999
-    
     # calculate the size of each pixel in the x and y dimensions
     size = max(x_max - x_min, y_max - y_min) / res_im
     
@@ -142,24 +152,8 @@ def topview(points, res_im = 256, inverse = False, plot = False):
             x_pos = np.array((points[:,0] - x_med) / size, dtype = int) + int(res_im/2)
             y_pos = np.array((points[:,1] - y_min) / size, dtype = int)
     
-    # save as pandas array
-    # wrap indices to avoid out of range indexing
-    points = pd.DataFrame({
-        "x": x_pos % res_im,
-        "y": y_pos % res_im,
-        "depth": points[:,2]})
-    
-    # get minimum/maximum depth at each unique coordinate
-    if inverse:
-        points = points.groupby(["x", "y"])["depth"].min().reset_index()
-    else:
-        points = points.groupby(["x", "y"])["depth"].max().reset_index()
-    
-    # overwrite depth values
-    top_image[points["x"], points["y"]] = points["depth"]
-    
-    # replace dummy values with value
-    top_image[top_image == -999] = 0
+    # reduce duplicate pixels without pandas object allocation
+    top_image = _rasterize_depth(x_pos, y_pos, points[:, 2], res_im, inverse=inverse)
     
     # show image
     if plot:
@@ -193,9 +187,6 @@ def sideview(points, res_im = 256, plot = False):
     x_max, z_max = np.max(points[:,[0,2]], axis = 0)
     x_med, z_med = np.median(points[:,[0,2]], axis = 0)
     
-    # create an empty numpy array to store the depth image
-    side_image = np.ones((res_im, res_im)) * -999
-    
     # calculate the size of each pixel in the x and y dimensions
     size = max(x_max - x_min, z_max - z_min) / res_im
     
@@ -210,21 +201,8 @@ def sideview(points, res_im = 256, plot = False):
         x_pos = np.array((points[:,0] - x_med) / size, dtype = int) + int(res_im/2)
         z_pos = np.array((points[:,2] - z_min) / size, dtype = int)
     
-    # save as pandas array
-    # wrap indices to avoid out of range indexing
-    points = pd.DataFrame({
-        "x": x_pos % res_im,
-        "z": z_pos % res_im,
-        "depth": points[:,1]})
-    
-    # get maximum depth at each unique coordinate
-    points = points.groupby(["x", "z"])["depth"].max().reset_index()
-    
-    # overwrite depth values
-    side_image[points["x"], points["z"]] = points["depth"]
-    
-    # replace dummy values with value
-    side_image[side_image == -999] = 0
+    # reduce duplicate pixels without pandas object allocation
+    side_image = _rasterize_depth(x_pos, z_pos, points[:, 1], res_im, inverse=False)
     
     # show image
     if plot:
