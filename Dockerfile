@@ -49,6 +49,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY --from=builder /app /app
 
+# Galaxy runs containers with the host job UID, not as the image's root user.
+# Do not inherit private checkout modes (for example 0600) into runtime assets.
+RUN chmod -R a+rX /app
+
 # ENV and cache setup
 ENV TORCH_HOME=/app/torch_cache
 RUN mkdir -p /app/torch_cache/hub/checkpoints
