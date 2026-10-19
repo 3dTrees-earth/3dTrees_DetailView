@@ -11,6 +11,19 @@ def _ensure_las_dimension(las_data, name, dtype, laspy):
         las_data.add_extra_dim(laspy.ExtraBytesParams(name=name, type=dtype))
 
 
+def _drop_copc_records(las_data):
+    """Drop COPC info and hierarchy records read from a COPC input.
+
+    They describe the input file's octree layout. The output is a plain LAZ,
+    and laspy refuses to write them ("Writing COPC is not supported"). All
+    other VLRs and EVLRs, e.g. the CRS, are kept.
+    """
+    for records in (las_data.vlrs, las_data.evlrs):
+        if records is not None:
+            records[:] = [record for record in records if record.user_id != "copc"]
+    return las_data
+
+
 def _count_valid_las_trees(las_data, tree_id_col, min_points, np, pd):
     if tree_id_col not in list(las_data.point_format.dimension_names):
         return None
@@ -120,7 +133,7 @@ def run_predict(params: Parameters):
         )
 
     if os.path.splitext(prediction_data)[1].lower() in [".las", ".laz"]:
-        prediction_data = laspy.read(prediction_data)
+        prediction_data = _drop_copc_records(laspy.read(prediction_data))
 
         # check if coordinates exceed float32 mm precision; shift by updating header offsets (avoids OverflowError)
 
